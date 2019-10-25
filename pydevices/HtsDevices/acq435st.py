@@ -23,6 +23,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 import numpy as np
+import time
+import sys
 import MDSplus
 import threading
 from queue import Queue, Empty
@@ -136,8 +138,8 @@ class ACQ435ST(MDSplus.Device):
                     ans = lcm(ans, e)
                 return int(ans)
 
-            if self.dev.debug:
-                print("MDSWorker running")
+            #if self.dev.debug:
+            print("ACQ435 MDSWorker running")
 
             event_name = self.dev.seg_event.data()
 
@@ -155,10 +157,21 @@ class ACQ435ST(MDSplus.Device):
             self.device_thread.start()
 
             segment = 0
-            first = True
-            running = self.dev.running
             max_segments = self.dev.max_segments.data()
-            while running.on and segment < max_segments:
+            while segment < max_segments and not (self.full_buffers.empty() and self.device_thread.done):
+                print("segment < max_segments = %s" % segment < max_segments)
+                print("self.full_buffers.empty() = %s" % self.full_buffers.empty())
+                sys.stdout.flush()
+
+                if not self.dev.running.on:
+                    print("self.dev.running.on = False, stopping device")
+                    sys.stdout.flush()
+                    self.device_thread.stop()
+                    while not self.device_thread.done:
+                        print("Waiting for self.device_thread.done")
+                        sys.stdout.flush()
+                        time.sleep(1)
+
                 try:
                     buf = self.full_buffers.get(block=True, timeout=1)
                 except Empty:
@@ -167,7 +180,9 @@ class ACQ435ST(MDSplus.Device):
                 buffer = np.right_shift(np.frombuffer(buf, dtype='int32') , 8)
                 i = 0
                 for c in self.chans:
-                    slength = self.seg_length/self.decim[i]
+                    ssamples = len(buffer) / (self.nchans * np.int32(0).nbytes)
+                    print("# of samples in buffer for channel %s: %s" % (c, ssamples))
+                    slength = ssamples / self.decim[i]
                     deltat  = dt * self.decim[i]
                     if c.on:
                         b = buffer[i::self.nchans*self.decim[i]]
@@ -199,6 +214,7 @@ class ACQ435ST(MDSplus.Device):
                 self.full_buffers = mds.full_buffers
                 self.trig_time = 0
                 self.io_buffer_size = 4096
+                self.done = False
 
             def stop(self):
                 self.running = False
@@ -206,27 +222,31 @@ class ACQ435ST(MDSplus.Device):
             def run(self):
                 import socket
                 import time
-                if self.debug:
-                    print("DeviceWorker running")
+                #if self.debug:
+                print("ACQ435 DeviceWorker running")
 
                 self.running = True
-                first = True
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.connect((self.node_addr,4210))
                 s.settimeout(6)
 
+                buf = None
+
                 # trigger time out count initialization:
+                first = True
                 while self.running:
-                    try:
-                        buf = self.empty_buffers.get(block=False)
-                    except Empty:
-                        print("NO BUFFERS AVAILABLE. MAKING NEW ONE")
-                        buf = bytearray(self.segment_bytes)
+                    if buf == None:
+                        try:
+                            buf = self.empty_buffers.get(block=False)
+                            print("Got an empty buffer")
+                        except Empty:
+                            print("NO BUFFERS AVAILABLE. MAKING NEW ONE")
+                            buf = bytearray(self.segment_bytes)
 
                     toread = self.segment_bytes
                     try:
                         view = memoryview(buf)
-                        while toread:
+                        while self.running and toread > 0:
                             nbytes = s.recv_into(view, min(self.io_buffer_size,toread))
                             if first:
                                 self.trig_time = time.time()
@@ -236,6 +256,7 @@ class ACQ435ST(MDSplus.Device):
 
                     except socket.timeout as e:
                         print("We have Got a timeout.")
+                        sys.stdout.flush()
                         err = e.args[0]
                         # this next if/else is a bit redundant, but illustrates how the
                         # timeout exception is setup
@@ -243,6 +264,7 @@ class ACQ435ST(MDSplus.Device):
                         if err == 'timed out':
                             time.sleep(1)
                             print (' received timed out, retry later')
+                            sys.stdout.flush()
                             continue
                         else:
                             print (e)
@@ -250,14 +272,19 @@ class ACQ435ST(MDSplus.Device):
                     except socket.error as e:
                         # Something else happened, handle error, exit, etc.
                         print("socket error", e)
+                        sys.stdout.flush()
                         self.full_buffers.put(buf[:self.segment_bytes-toread])
+                        buf = None
                         break
                     else:
-                        if toread != 0:
-                            print ('orderly shutdown on server end')
-                            break
-                        else:
-                            self.full_buffers.put(buf)
+                        # Check to make sure we've read some data
+                        if toread < self.segment_bytes:
+                            print("Pushing a full buffer %s < %s" % (toread, self.segment_bytes))
+                            sys.stdout.flush()
+                            self.full_buffers.put(buf[:self.segment_bytes-toread])
+                            buf = None
+                
+                self.done = True
 
     def setChanScale(self,num):
         chan=self.__getattr__('INPUT_%2.2d' % num)
