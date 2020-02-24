@@ -77,7 +77,7 @@ class ACQ435ST(MDSplus.Device):
         {'path':':LOG_OUTPUT','type':'text', 'options':('no_write_model','write_once','write_shot')},
         {'path': ':GIVEUP_TIME', 'type': 'numeric', 'value': 180.0, 'options': ('no_write_shot',)},
         {'path':':INIT_ACTION','type':'action',
-         'valueExpr':"Action(Dispatch('CAMAC_SERVER','INIT',50,None),Method(None,'INIT',head,'auto'))",
+         'valueExpr':"Action(Dispatch('CAMAC_SERVER','INIT',50,None),Method(None,'INIT',head))",
          'options':('no_write_shot',)},
         {'path':':STOP_ACTION','type':'action',
          'valueExpr':"Action(Dispatch('CAMAC_SERVER','STORE',50,None),Method(None,'STOP',head))",
