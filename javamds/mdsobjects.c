@@ -3648,5 +3648,81 @@ EXPORT struct descriptor_xd *getDeviceFields(char *deviceName)
 }
 
 
+static jint DYN_JNI_CreateJavaVM(JavaVM ** jvm, void **env, JavaVMInitArgs * vm_args){
+  static jint(*JNI_CreateJavaVM) (JavaVM **, void **, JavaVMInitArgs *) = NULL;
+  int status = LibFindImageSymbol_C("java", "JNI_CreateJavaVM", &JNI_CreateJavaVM);
+  if (!(status & 1)) {
+      status = LibFindImageSymbol_C("jvm", "JNI_CreateJavaVM", &JNI_CreateJavaVM);
+    if (!(status & 1)) {
+      printf("JNI_CreateJavaVM Not Found!\n");
+      return -1;
+    }
+  }
+  return (*JNI_CreateJavaVM) (jvm, env, vm_args);
+}
 
+
+EXPORT void deviceSetup(char *deviceName, char *treeName, int shot, char *rootName, int x, int y)
+{
+  jint res;
+  jclass cls;
+  jmethodID mid;
+  jstring jDeviceName, jTreeName, jRootName;
+  jvalue args[6];
+  char classpath[2048], *curr_classpath;
+
+  JavaVM *jvm;
+  JavaVMInitArgs vm_args;
+  JavaVMOption options[3];
+
+  #ifdef _WIN32
+  #define PATH_SEPARATOR ';'
+  #else
+  #define PATH_SEPARATOR ':'
+  #endif
+  JNIEnv *env = 0;
+
+  if (env == 0) {		/* Java virtual machine does not exist yet */
+    vm_args.version = JNI_VERSION_1_2;	//0x00010001;
+    options[0].optionString = "-Djava.compiler=NONE";	/* disable JIT */
+    options[1].optionString = "-Djava.class.path=.";	// /usr/local/mdsplus/java/classes/jTraverser.jar";
+    options[2].optionString = "-verbose:jni";	/* print JNI-related messages */
+
+    vm_args.nOptions = 2;
+    vm_args.ignoreUnrecognized = JNI_FALSE;
+    vm_args.options = options;
+    curr_classpath = getenv("CLASSPATH");
+
+    if (curr_classpath) {
+      sprintf(classpath, "%s%c%s", options[1].optionString, PATH_SEPARATOR, curr_classpath);
+      options[1].optionString = classpath;
+    }
+
+    res = DYN_JNI_CreateJavaVM(&jvm, (void **)&env, &vm_args);
+
+    if (res < 0) {
+      printf("\nCannot create Java VM (result = %d)!!\n", (int)res);
+      return;
+    }
+  }
+  cls = (*env)->FindClass(env, "DeviceSetup");
+  if (cls == 0) {
+    printf("\nCannot find DeviceSetup classe!");
+    return;
+  }
+  mid = (*env)->GetStaticMethodID(env, cls, "activateDeviceSetup",
+				  "(Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;II)V");
+  if (mid == 0) {
+    printf("\nCannot find method activateDeviceSetup\n");
+    return;
+  }
+  args[0].l = jDeviceName = (*env)->NewStringUTF(env, deviceName);
+  args[1].l = jTreeName = (*env)->NewStringUTF(env, treeName);
+  args[2].i = shot;
+  args[3].l = jRootName = (*env)->NewStringUTF(env, rootName);
+  args[4].i = x;
+  args[5].i = y;
+
+  (*env)->CallStaticVoidMethodA(env, cls, mid, args);
+}
 
