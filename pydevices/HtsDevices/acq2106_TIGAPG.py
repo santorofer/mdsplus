@@ -58,11 +58,26 @@ class ACQ2106_TIGAPG(MDSplus.Device):
     def init(self):
         import acq400_hapi
         uut = acq400_hapi.Acq2106_TIGA(self.node.data())
-        site_number  = self.dio_site.data()
+        site_number  = int(self.dio_site.data())
 
-        uut_sX_nchan = 'uut.s' + str(int(site_number)) + '.NCHAN'
+        try:
+            if site_number   == 1:
+                slot = uut.s1
+            elif site_number == 2:
+                slot = uut.s2
+            elif site_number == 3:
+                slot = uut.s3
+            elif site_number == 4:
+                slot = uut.s4
+            elif site_number == 5:
+                slot = uut.s5
+            elif site_number == 6:
+                slot = uut.s6
+        except:
+            pass
+
         #Number of channels of the DIO482, e.g nchans = 32
-        nchans = int(eval(uut_sX_nchan))
+        nchans = int(slot.NCHAN)
 
         if self.debug >= 2:
             self.dprint(2, 'DIO site and number of channels: {} {}'.format(site_number, nchans))
@@ -76,25 +91,11 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         uut.s0.SIG_EVENT_SRC_0 = 'GPG'
 
         #uut.s0.GPG_ENABLE    ='enable'
-        uut_sX_GPG_ENABLE = 'uut.s' + str(int(site_number)) + '.GPG_ENABLE = 1'
-        exec(uut_sX_GPG_ENABLE)
-
-        #uut.s0.TRG       ='enable'
-        uut_sX_TRG = 'uut.s' + str(int(site_number)) + '.TRG = "enable"'
-        exec(uut_sX_TRG)
-
-        trg_dx = str(self.gpg_trg_dx.data())
-        #uut.s0.TRG_DX    = str(self.gpg_trg_dx.data())   #d1 for WRTT1. d0 for WRTT0 or EXT.
-        uut_sX_TRG_DX = 'uut.s' + str(int(site_number)) + '.TRG_DX = trg_dx'
-        exec(uut_sX_TRG_DX)
-
-        #uut.s0.TRG_SENSE ='rising'
-        uut_sX_TRG_SENSE = 'uut.s' + str(int(site_number)) + '.TRG_SENSE = "rising"'
-        exec(uut_sX_TRG_SENSE)
-
-        #uut.s0.GPG_MODE      ='ONCE'
-        uut_sX_GPG_MODE = 'uut.s' + str(int(site_number)) + '.GPG_MODE = "ONCE"'
-        exec(uut_sX_GPG_MODE)
+        slot.GPG_ENABLE = 1
+        slot.TRG        ='enable'
+        slot.TRG_DX     = str(self.gpg_trg_dx.data())
+        slot.TRG_SENSE  ='rising'
+        slot.GPG_MODE   ='ONCE'
 
         if self.debug >= 2:
             start_time = time.time()
