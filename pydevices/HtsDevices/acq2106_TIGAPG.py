@@ -76,7 +76,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         except:
             pass
 
-        #Number of channels of the DIO482, e.g nchans = 32
+        #Number of channels of the DIO482, e.g nchans = 4
         nchans = int(slot.NCHAN)
 
         if self.debug >= 2:
