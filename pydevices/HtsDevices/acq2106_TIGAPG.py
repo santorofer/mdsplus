@@ -22,6 +22,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+import threading
 import MDSplus
 import time
 import numpy
@@ -49,6 +50,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         {'path':':STOP_ACTION', 'type':'action',   'valueExpr':"Action(Dispatch('CAMAC_SERVER','STORE',50,None),Method(None,'STOP',head))",      'options':('no_write_shot',)},
         {'path':':STL_LISTS',   'type':'text',     'options':('write_shot',)},
         {'path':':GPG_TRG_DX',  'type':'text',     'value': 'dx', 'options':('write_shot',)},
+        {'path':':WRTD_ID',     'type':'text',     'value': 'site_wr_message', 'options':('write_shot',)},
     ]
 
 
@@ -56,31 +58,14 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         parts.append({'path':':OUTPUT_%3.3d' % (j+1,), 'type':'NUMERIC', 'options':('no_write_shot',)})
 
     def init(self):
-        import acq400_hapi
-        uut = acq400_hapi.Acq2106_TIGA(self.node.data())
-        site_number  = int(self.dio_site.data())
-
-        try:
-            if site_number   == 1:
-                slot = uut.s1
-            elif site_number == 2:
-                slot = uut.s2
-            elif site_number == 3:
-                slot = uut.s3
-            elif site_number == 4:
-                slot = uut.s4
-            elif site_number == 5:
-                slot = uut.s5
-            elif site_number == 6:
-                slot = uut.s6
-        except:
-            pass
+        uut  = self.getUUT()
+        slot = self.getSlot()
 
         #Number of channels of the DIO482, e.g nchans = 4
         nchans = int(slot.NCHAN)
 
         if self.debug >= 2:
-            self.dprint(2, 'DIO site and number of channels: {} {}'.format(site_number, nchans))
+            self.dprint(2, 'DIO site and number of channels: {} {}'.format(self.dio_site.data(), nchans))
 
         # uut.s0.SIG_SRC_TRG_0 ='WRTT0'
         # Setting the trigger in the GPG module. These settings depends very much on what is the
@@ -96,6 +81,8 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         slot.TRG_DX     = str(self.gpg_trg_dx.data())
         slot.TRG_SENSE  ='rising'
         slot.GPG_MODE   ='ONCE'
+
+        slot.WRTD_ID = str(self.wrtd_id.data())
 
         if self.debug >= 2:
             start_time = time.time()
@@ -116,22 +103,89 @@ class ACQ2106_TIGAPG(MDSplus.Device):
       
     INIT=init
 
+    def stop(self):
+        slot = self.getSlot()
+        slot.GPG_ENABLE = 0
+        self.running.on = False
+    STOP=stop
+
+    def trig(self):
+        thread = threading.Thread(target = self._trig)
+        thread.start()
+        return None
+    TRIG=trig
+
+
+    def _trig(self):
+        uut  = self.getUUT()
+        slot = self.getSlot()
+        message = str(self.wrtd_id.data())
+
+        # Choose the source (eg. WRTT0 or WRTT1) that use go through the bus (TRG, EVENT) and the signal (d0, d1)
+        if message in uut.cC.WRTD_RX_MATCHES:
+            # Define the WRTD_MASK:
+            slot.WRTD_TX_MASK = (1<<(int(self.dio_site.data())+1))
+                
+        elif message in uut.cC.WRTD_RX_MATCHES1:
+            # Define the WRTD_MASK:
+            slot.WRTD_TX_MASK = (1<<(int(self.dio_site.data())+1))
+        
+        else:
+            print('Message does not match either of the WRTTs messages available')
+            self.running.on = False
+
+        slot.wrtd_txi = message
+
+        self.trig_time.putData(MDSplus.Int64(uut.s0.wr_tai_cur))
+
+        # Reseting the RX matches to its orignal default values found in the acq2106:
+        # /mnt/local/sysconfig/wr.sh
+        # uut.cC.wrtd_reset_tx = 1
+
+    _TRIG=_trig
+
+    def getUUT(self):
+        import acq400_hapi
+        uut = acq400_hapi.Acq2106_TIGA(self.node.data())
+        return uut
+
+    def getSlot(self):
+        uut = self.getUUT()
+        site_number  = int(self.dio_site.data())
+
+        # Verify site_number is a valid int between 1 and 6
+        # if site_number in range(1, 7):
+        #     self.slot = uut.__getattr__('s' + self.dio_site.data())
+
+        try:
+            if site_number   == 1:
+                slot = uut.s1
+            elif site_number == 2:
+                slot = uut.s2
+            elif site_number == 3:
+                slot = uut.s3
+            elif site_number == 4:
+                slot = uut.s4
+            elif site_number == 5:
+                slot = uut.s5
+            elif site_number == 6:
+                slot = uut.s6
+        except:
+            pass
+        
+        return slot
 
     def load_stl_data(self,traces):
-        import acq400_hapi
-
+        uut = self.getUUT()
         # Pair of (transition time, 32 bit channel states):
         stl_pairs = self.stl_lists.data()
         # Change from Numpy array to List with toList()
         pairs = ''.join([ str(item) for item in stl_pairs.tolist() ])        
-
-        uut = acq400_hapi.Acq2106_TIGA(self.node.data())
         
         uut.load_dio482pg(self.dio_site.data(), pairs, traces)
 
 
     def set_stl(self, nchan):
-
         all_t_times   = []
         all_t_times_states = []
 

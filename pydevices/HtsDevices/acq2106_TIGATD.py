@@ -47,8 +47,7 @@ class ACQ2106_TIGATD(MDSplus.Device):
         {'path':':EVENT0_SRC',  'type':'text',    'value': 'WRTTx', 'options':('write_shot',)},
         {'path':':TRIG_TIME',   'type':'numeric', 'value': 0.,       'options':('write_shot',)},
         {'path':':T0',          'type':'numeric', 'value': 0.,       'options':('write_shot',)},
-        {'path':':WRTT0_MSG',   'type':'text', 'value': "acq2106_999", 'options':('write_shot',)},
-        {'path':':WRTT1_MSG',   'type':'text', 'value': "acq2106_999", 'options':('write_shot',)},
+
         {'path':':WR_INIT',     'type':'text',   'options':('write_shot',)},
             {'path':':WR_INIT:WRTD_TICKNS', 'type':'numeric', 'value': 50, 'options':('write_shot',)},
             {'path':':WR_INIT:WRTD_DNS',    'type':'numeric', 'value': 50000000, 'options':('write_shot',)},
@@ -61,6 +60,7 @@ class ACQ2106_TIGATD(MDSplus.Device):
             {'path':':WR_INIT:WRTD_ID',     'type':'text', 'value': "acq2106_999", 'options':('write_shot',)},
             {'path':':WR_INIT:WRTD_TX',     'type':'numeric', 'value': 0, 'options':('write_shot',)},
             {'path':':WR_INIT:WRTD_RX',     'type':'numeric', 'value': 0, 'options':('write_shot',)},
+            {'path':':WR_INIT:WRTD_TX_MASK','type':'numeric', 'value': 0, 'options':('write_shot',)},
 
         {'path':':RUNNING',     'type':'numeric', 'options':('no_write_model',)},
         {'path':':LOG_OUTPUT',  'type':'text',    'options':('no_write_model', 'write_once', 'write_shot',)},
@@ -74,17 +74,19 @@ class ACQ2106_TIGATD(MDSplus.Device):
 
         msgs  = str(newmsg)
         wrmgs = msgs.split(":")
-        print("Messages are {} and {}".format(str(wrmgs[0]), str(wrmgs[1])))
 
-        self.wrtt1_msg.record = str(wrmgs[1])
+        wrmessages  = str(wrmgs[0])
+        wrmessages1 = str(wrmgs[1])
+        
+        print("Messages are {} and {}".format(str(wrmgs[0]), str(wrmgs[1])))
 
         #Record the state of the WRTD environment:
         #self.wr_init_wrtd_delay.record  = MDSplus.Int64(uut.cC.WRTD_DELAY01)
         self.wr_init_wrtd_dns.record    = MDSplus.Int64(uut.cC.WRTD_DELTA_NS) # 50msec - our "safe time for broadcast"
         self.wr_init_wrtd_id.record     = uut.cC.WRTD_ID
         self.wr_init_wrtd_rx_dtp.record = uut.cC.WRTD_RX_DOUBLETAP            # Match for DOUBLETAP: set WRTT0, delay WRTD_DELAY01, set WRTT1
-        self.wr_init_wrtd_rx_m.record   = str(wrmgs[0])                       # Match for WRTT0
-        self.wr_init_wrtd_rx_m1.record  = str(wrmgs[1])                       # Match for WRTT1
+        self.wr_init_wrtd_rx_m.record   = wrmessages                          # Match for WRTT0
+        self.wr_init_wrtd_rx_m1.record  = wrmessages1                         # Match for WRTT1
         self.wr_init_wrtd_tickns.record = MDSplus.Int64(uut.cC.WRTD_TICKNS)   # For SR=20MHz, for ACQ423, this number will be much bigger. It's the Si5326 tick at 20MHz ..
         self.wr_init_wrtd_tx.record     = MDSplus.Int64(uut.cC.WRTD_TX)
         self.wr_init_wrtd_rx.record     = MDSplus.Int64(uut.cC.WRTD_RX)
@@ -96,9 +98,9 @@ class ACQ2106_TIGATD(MDSplus.Device):
         uut.cC.wrtd_commit_rx = 1
 
         # Define RX matches:
-        uut.cC.WRTD_RX_MATCHES  = str(wrmgs[0])
-        uut.cC.WRTD_RX_MATCHES1 = str(wrmgs[1])
-        
+        uut.cC.WRTD_RX_MATCHES  = wrmessages
+        uut.cC.WRTD_RX_MATCHES1 = wrmessages1
+
         #Commit the changes for WRTD RX
         uut.cC.wrtd_commit_rx = 1
 
@@ -125,13 +127,20 @@ class ACQ2106_TIGATD(MDSplus.Device):
             self.trig_src.record   = 'WRTT0'
             self.event0_src.record = 'WRTT0'
 
+            # Define the WRTD_MASK:
+            uut.cC.WRTD_TX_MASK = (1<<0)
+                
+
         elif message in uut.cC.WRTD_RX_MATCHES1:
             # Save choices in tree node:
             self.trig_src.record   = 'WRTT1'
             self.event0_src.record = 'WRTT1'
+
+            # Define the WRTD_MASK:
+            uut.cC.WRTD_TX_MASK = (1<<1)
         
         else:
-            print('Message does not match either of the WRTTs available')
+            print('Message does not match either of the WRTTs messages available')
             self.running.on = False
 
         uut.cC.wrtd_txi = message
