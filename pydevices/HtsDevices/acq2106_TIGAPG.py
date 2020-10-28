@@ -47,6 +47,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         {'path':':RUNNING',     'type':'numeric',  'options':('no_write_model',)},
         {'path':':LOG_OUTPUT',  'type':'text',     'options':('no_write_model', 'write_once', 'write_shot',)},
         {'path':':INIT_ACTION', 'type':'action',   'valueExpr':"Action(Dispatch('CAMAC_SERVER','INIT',50,None),Method(None,'INIT',head))",'options':('no_write_shot',)},
+        {'path':':TRIG_ACTION', 'type':'action',   'valueExpr':"Action(Dispatch('CAMAC_SERVER','TRIG',50,None),Method(None,'TRIG',head))",'options':('no_write_shot',)},
         {'path':':STOP_ACTION', 'type':'action',   'valueExpr':"Action(Dispatch('CAMAC_SERVER','STORE',50,None),Method(None,'STOP',head))",      'options':('no_write_shot',)},
         {'path':':STL_LISTS',   'type':'text',     'options':('write_shot',)},
         {'path':':GPG_TRG_DX',  'type':'text',     'value': 'dx', 'options':('write_shot',)},
@@ -75,7 +76,6 @@ class ACQ2106_TIGAPG(MDSplus.Device):
 
         uut.s0.SIG_EVENT_SRC_0 = 'GPG'
 
-        #uut.s0.GPG_ENABLE    ='enable'
         slot.GPG_ENABLE = 1
         slot.TRG        ='enable'
         slot.TRG_DX     = str(self.gpg_trg_dx.data())
@@ -109,14 +109,14 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         self.running.on = False
     STOP=stop
 
+    # def trig(self):
+    #     thread = threading.Thread(target = self._trig)
+    #     thread.start()
+    #     return None
+    # TRIG=trig
+
+
     def trig(self):
-        thread = threading.Thread(target = self._trig)
-        thread.start()
-        return None
-    TRIG=trig
-
-
-    def _trig(self):
         uut  = self.getUUT()
         slot = self.getSlot()
         message = str(self.wrtd_id.data())
@@ -142,7 +142,8 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         # /mnt/local/sysconfig/wr.sh
         # uut.cC.wrtd_reset_tx = 1
 
-    _TRIG=_trig
+    # _TRIG=_trig
+    TRIG=trig
 
     def getUUT(self):
         import acq400_hapi
