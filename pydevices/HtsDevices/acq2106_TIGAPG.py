@@ -109,14 +109,14 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         self.running.on = False
     STOP=stop
 
-    # def trig(self):
-    #     thread = threading.Thread(target = self._trig)
-    #     thread.start()
-    #     return None
-    # TRIG=trig
-
-
     def trig(self):
+        thread = threading.Thread(target = self._trig)
+        thread.start()
+        return None
+    TRIG=trig
+
+
+    def _trig(self):
         uut  = self.getUUT()
         slot = self.getSlot()
         message = str(self.wrtd_id.data())
@@ -142,8 +142,8 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         # /mnt/local/sysconfig/wr.sh
         # uut.cC.wrtd_reset_tx = 1
 
-    # _TRIG=_trig
-    TRIG=trig
+    _TRIG=_trig
+    #TRIG=trig
 
     def getUUT(self):
         import acq400_hapi

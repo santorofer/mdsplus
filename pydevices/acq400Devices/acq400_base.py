@@ -384,6 +384,7 @@ class _ACQ400_TR_BASE(_ACQ400_BASE):
         # d1:
         srcs_1 = ['STRIG', 'HOSTA', 'HDMI_GPIO', 'GPG1', 'DSP1', 'FP_SYNC', 'WRTT1', 'NONE']
 
+        # The following loops considers the PRE->POST transitiona
         if str(self.trig_src.data()) in srcs_1:
             uut.s0.SIG_SRC_TRG_1   = str(self.trig_src.data())
             #Setting the signal (dX) to use for ACQ2106 stream control
