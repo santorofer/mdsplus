@@ -74,7 +74,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         # the same used by the digitazer module. Otherwise, we can choose a different one, to be in an independent highway from
         # the digitazer, like d1.
 
-        uut.s0.SIG_EVENT_SRC_0 = 'GPG'
+        uut.s0.SIG_EVENT_SRC_0 = 'TRG' # or GPG
 
         slot.GPG_ENABLE = 1
         slot.TRG        ='enable'
