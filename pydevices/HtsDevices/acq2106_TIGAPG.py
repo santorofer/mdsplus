@@ -32,7 +32,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
     """
     D-Tacq ACQ2106 with ACQ423 Digitizers (up to 6)  real time streaming support.
 
-    DIO with 4 channels
+    DIO with 4 channels or 32
 
     MDSplus.Device.debug - Controlled by environment variable DEBUG_DEVICES
         MDSplus.Device.dprint(debuglevel, fmt, args)
@@ -59,12 +59,6 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         uut  = self.getUUT()
         slot = self.getSlot()
 
-        #Number of channels of the DIO482, e.g nchans = 4
-        nchans = int(slot.NCHAN)
-
-        if self.debug >= 2:
-            self.dprint(2, 'DIO site and number of channels: {} {}'.format(self.dio_site.data(), nchans))
-
         # uut.s0.SIG_SRC_TRG_0 ='WRTT0'
         # Setting the trigger in the GPG module. These settings depends very much on what is the
         # configuration of the experiment. For example, when using one WRTT timing highway, then we can use d0, which will be
@@ -79,23 +73,32 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         slot.TRG_SENSE  ='rising'
         slot.GPG_MODE   ='ONCE'
 
-        site_number  = int(self.dio_site.data())
-        if site_number in [2, 3, 4, 5]:
-            slot.WRTD_ID = str(self.wrtd_id.data())   # TIGA sites
-        else:
-            uut.cC.WRTD_ID = str(self.wrtd_id.data()) # Global
-
         if self.debug >= 2:
             start_time = time.time()
             self.dprint(2, "Building STL: start")
 
         #Create the STL table from a series of transition times and states given in OUTPUT.
-        #TIGA: GPG nchans = 4, or 32
-        start_time = time.time()
-        self.set_stl(nchans)
-        
-        if self.debug >= 2:
-            self.dprint(2, "Building STL: end --- %s seconds ---", (time.time() - start_time))
+        #TIGA: GPG nchans = 4, or non-TIGA nchans = 32
+
+        tiga    = '7B'
+        nontiga = '6B'
+        dio_module = slot.MTYPE
+
+        if dio_module in tiga:
+            nchans = 4            
+            if self.debug >= 2:
+                self.dprint(2, 'DIO site and number of channels: {} {}'.format(self.dio_site.data(), nchans))
+            slot.WRTD_ID = str(self.wrtd_id.data())   # TIGA sites
+
+            self.set_stl(nchans)
+
+        elif dio_module in nontiga:
+            nchans = 32
+            if self.debug >= 2:
+                self.dprint(2, 'DIO site and number of channels: {} {}'.format(self.dio_site.data(), nchans))
+            uut.cC.WRTD_ID = str(self.wrtd_id.data()) # Global
+            
+            self.set_stl(nchans)
 
         #Load the STL into the WRPG hardware: GPG
         traces = False  # True: shows debug information during loading
