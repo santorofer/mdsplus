@@ -39,7 +39,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
          - print if debuglevel >= MDSplus.Device.debug
 
     """
-    parts=[
+    base_parts=[
         {'path':':COMMENT',     'type':'text',     'options':('no_write_shot',)},
         {'path':':NODE',        'type':'text',     'options':('no_write_shot',)},
         {'path':':DIO_SITE',    'type':'numeric',  'value': int(4), 'options':('no_write_shot',)},
@@ -54,9 +54,6 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         {'path':':WRTD_ID',     'type':'text',     'value': 'site_wr_message', 'options':('write_shot',)},
     ]
 
-
-    for j in range(4):
-        parts.append({'path':':OUTPUT_%3.3d' % (j+1,), 'type':'NUMERIC', 'options':('no_write_shot',)})
 
     def init(self):
         uut  = self.getUUT()
@@ -82,16 +79,20 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         slot.TRG_SENSE  ='rising'
         slot.GPG_MODE   ='ONCE'
 
-        slot.WRTD_ID = str(self.wrtd_id.data())
+        site_number  = int(self.dio_site.data())
+        if site_number in [2, 3, 4, 5]:
+            slot.WRTD_ID = str(self.wrtd_id.data())   # TIGA sites
+        else:
+            uut.cC.WRTD_ID = str(self.wrtd_id.data()) # Global
 
         if self.debug >= 2:
             start_time = time.time()
             self.dprint(2, "Building STL: start")
 
         #Create the STL table from a series of transition times and states given in OUTPUT.
-        #TIGA: GPG nchans = 4
+        #TIGA: GPG nchans = 4, or 32
         start_time = time.time()
-        self.set_stl(4)
+        self.set_stl(nchans)
         
         if self.debug >= 2:
             self.dprint(2, "Building STL: end --- %s seconds ---", (time.time() - start_time))
@@ -264,3 +265,23 @@ class ACQ2106_TIGAPG(MDSplus.Device):
 
         # MDSplus wants a numpy array
         self.stl_lists.putData(numpy.array(stl_list))
+
+OUTFMT3 = ':OUTPUT_%3.3d'
+
+ACQ2106_CHANNEL_CHOICES = [4, 32]
+
+def assemble(cls):
+    outfmt = OUTFMT3
+    for ch in range(1, cls.nchan+1):
+        cls.parts.append({'path':outfmt%(ch,), 'type':'NUMERIC', 'options':('no_write_shot',)})
+    return cls
+
+
+def create_classes(base_class, root_name, parts, channel_choices):
+    my_classes = {}
+    for nchan in channel_choices:
+        class_name = "%s_%s" % (root_name, nchan)
+        my_parts = list(parts)
+        my_classes[class_name] = assemble(type(class_name, (base_class,), {"nchan": nchan, "parts": my_parts}))
+        my_classes[class_name].__module__ = base_class.__module__
+    return my_classes
