@@ -162,16 +162,16 @@ class _ACQ400_ST_BASE(_ACQ400_BASE):
     ARM=arm
 
     def stop(self):
-        import acq400_hapi
-        uut = acq400_hapi.Acq400(self.node.data(), monitor=True)
+        #import acq400_hapi
+        #uut = acq400_hapi.Acq400(self.node.data(), monitor=True)
         
         self.running.on = False
         
         # Initializing Sources back to NONE:
         # D0 signal:
-        uut.s0.SIG_SRC_TRG_0   = 'NONE'
+        #uut.s0.SIG_SRC_TRG_0   = 'NONE'
         # D1 signal:
-        uut.s0.SIG_SRC_TRG_1   = 'NONE'
+        #uut.s0.SIG_SRC_TRG_1   = 'NONE'
     STOP = stop
 
     class MDSWorker(threading.Thread):
@@ -305,6 +305,7 @@ class _ACQ400_ST_BASE(_ACQ400_BASE):
                     try:
                         buf = self.empty_buffers.get(block=False)
                     except Empty:
+                        print("NO BUFFERS AVAILABLE. MAKING NEW ONE")
                         buf = bytearray(self.segment_bytes)
 
                     toread =self.segment_bytes

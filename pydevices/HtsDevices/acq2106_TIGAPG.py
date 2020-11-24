@@ -71,7 +71,7 @@ class ACQ2106_TIGAPG(MDSplus.Device):
         slot.TRG        ='enable'
         slot.TRG_DX     = str(self.gpg_trg_dx.data())
         slot.TRG_SENSE  ='rising'
-        slot.GPG_MODE   ='ONCE'
+        slot.GPG_MODE   ='LOOP'
 
         if self.debug >= 2:
             start_time = time.time()
