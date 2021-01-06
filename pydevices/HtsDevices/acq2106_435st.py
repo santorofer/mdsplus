@@ -82,6 +82,8 @@ class _ACQ2106_435ST(MDSplus.Device):
         {'path':':STOP_ACTION','type':'action',
          'valueExpr':"Action(Dispatch('CAMAC_SERVER','STORE',50,None),Method(None,'STOP',head))",
          'options':('no_write_shot',)},
+        #Trigger sources
+        {'path':':TRIG_SRC',   'type':'text',      'value': 'NONE', 'options':('write_shot',)},
         ]
 
     data_socket = -1
@@ -274,13 +276,58 @@ class _ACQ2106_435ST(MDSplus.Device):
         uut = acq400_hapi.Acq400(self.node.data(), monitor=False)
         uut.s0.set_knob('set_abort', '1')
 
+        # Initializing Sources to NONE:
+        # D0 signal:
+        uut.s0.SIG_SRC_TRG_0   = 'NONE'
+        # D1 signal:
+        uut.s0.SIG_SRC_TRG_1   = 'NONE'
+
+       # The following checks if a site has a ELF card in it:
         try:
-            self.slots = [uut.s1]
-            self.slots.append(uut.s2)
-            self.slots.append(uut.s3)
-            self.slots.append(uut.s4)
-            self.slots.append(uut.s5)
-            self.slots.append(uut.s6)
+            is_s1 = uut.s1 is not None
+        except:
+            is_s1 = False
+
+        try:
+            is_s2 = uut.s2 is not None
+        except:
+            is_s2 = False
+
+        try:
+            is_s3 = uut.s3 is not None
+        except:
+            is_s3 = False
+
+        try:
+            is_s4 = uut.s4 is not None
+        except:
+            is_s4 = False
+
+        try:
+            is_s5 = uut.s5 is not None
+        except:
+            is_s5 = False
+
+        try:
+            is_s6 = uut.s6 is not None
+        except:
+            is_s6 = False
+
+
+        self.slots = []
+        try:
+            if is_s1:
+                self.slots.append(uut.s1)
+            if is_s2:
+                self.slots.append(uut.s2)
+            if is_s3:
+                self.slots.append(uut.s3)
+            if is_s4:
+                self.slots.append(uut.s4)
+            if is_s5:
+                self.slots.append(uut.s5)
+            if is_s6:
+                self.slots.append(uut.s6)
         except:
             pass
 
@@ -317,6 +364,31 @@ class _ACQ2106_435ST(MDSplus.Device):
         # modifiers [TRG=int|ext]
         # modifiers [CLKDIV=div]  
         uut.s0.sync_role = '%s %s TRG:DX=%s' % (role, self.freq.data(), trg_dx)
+
+        # The following allows for WR sources to be chosen.
+        # Non-WR sources:
+        # d0:
+        srcs_0 = ['EXT', 'HDMI', 'HOSTB', 'GPG0', 'DSP0', 'nc', 'NONE']
+        # d1:
+        srcs_1 = ['STRIG', 'HOSTA', 'HDMI_GPIO', 'GPG1', 'DSP1', 'FP_SYNC', 'NONE']
+        
+        #Setting the signal (dX) to use for ACQ2106 stream control for WRTT
+        if str(self.trig_src.data()) in srcs_1:
+            uut.s0.SIG_SRC_TRG_1   = str(self.trig_src.data())
+        elif str(self.trig_src.data()) == 'WRTT1': # WR source
+            uut.s1.TRG       = 'enable'
+            uut.s1.TRG_DX    = 'd1'
+            uut.s1.TRG_SENSE = 'rising'
+            uut.s0.SIG_SRC_TRG_1   = str(self.trig_src.data())
+
+        elif str(self.trig_src.data()) in srcs_0:
+            uut.s0.SIG_SRC_TRG_0   = str(self.trig_src.data())
+        elif str(self.trig_src.data()) == 'WRTT0': # WR source
+            uut.s1.TRG       = 'enable'
+            uut.s1.TRG_DX    = 'd0'
+            uut.s1.TRG_SENSE = 'rising'
+            uut.s0.SIG_SRC_TRG_0   = str(self.trig_src.data())
+
 
         #Fetching all calibration information from every channel.
         uut.fetch_all_calibration()
