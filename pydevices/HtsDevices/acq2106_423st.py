@@ -430,7 +430,10 @@ class _ACQ2106_423ST(MDSplus.Device):
 
     def getUUT(self):
         import acq400_hapi
-        uut = acq400_hapi.Acq400(self.node.data(), monitor=False)
+        # instantiate s0. deduce what sort of ACQ400 this is and invoke the appropriate subclass,
+        # e.g acq400_hapi.acq400.Acq400 object
+        # or  acq400_hapi.acq400.Acq2106 object 
+        uut = acq400_hapi.factory(self.node.data())
         return uut
 
     def setChanScale(self, num):
