@@ -177,7 +177,7 @@ class _ACQ2106_423ST(MDSplus.Device):
                     getattr(self.dev, 'input_%3.3d_decimate' % (i+1)).data())
 
             self.seg_length = self.dev.seg_length.data()
-            self.segment_bytes = self.seg_length*self.nchans*np.int16(0).nbytes
+            self.segment_bytes = self.seg_length*(self.nchans + 8)*np.int16(0).nbytes
 
             self.empty_buffers = Queue()
             self.full_buffers = Queue()
@@ -232,12 +232,34 @@ class _ACQ2106_423ST(MDSplus.Device):
                     slength = self.seg_length/self.decim[i]
                     deltat = dt * self.decim[i]
                     if c.on:
-                        b = buffer[i::self.nchans*self.decim[i]]
+                        stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
+                        b = buffer[i::stride]
                         begin = segment * slength * deltat
                         end = begin + (slength - 1) * deltat
                         dim = MDSplus.Range(begin, end, deltat)
                         c.makeSegment(begin, end, dim, b)
                     i += 1
+                
+
+                spad = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
+
+                # In the ACQ:
+                # enable=1 disable=0?, SPAD count, ?
+                # acq2106_161> set.site 0 spad=1,4,0
+
+                # spad[0] sample number
+
+                # enable=1 disable=0, highway (d0=0, d1=1), rising=1 falling=0
+                # acq2106_161> set.site 0 spad1_us=1,0,1
+
+                # enable=1 disable=0, highway (d0=0, d1=1)?, WR_TAI_CUR_L register, update speed in Hz?
+                # acq2106_161> set.site 0 spadcop2 1,0,0x208,1000
+
+                # enable=1 disable=0, highway (d0=0, d1=1)?, WR_CUR_VERNR register, update speed in Hz?
+                # acq2106_161> set.site 0 spadcop3 1,0,0x218,1000
+
+                print('%d %d 0x%08x 0x%08x' % (spad[0], spad[1], spad[2], spad[3],))
+
                 segment += 1
                 MDSplus.Event.setevent(event_name)
 
