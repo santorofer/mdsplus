@@ -244,18 +244,21 @@ class _ACQ2106_423ST(MDSplus.Device):
                 spad = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
 
                 # In the ACQ:
-                # enable=1 disable=0?, SPAD count, ?
+                # [enable=1 disable=0], SPAD count, dont care
                 # acq2106_161> set.site 0 spad=1,4,0
 
                 # spad[0] sample number
 
-                # enable=1 disable=0, highway (d0=0, d1=1), rising=1 falling=0
+                # spad[1]
+                # [enable=1 disable=0], [d0=0, d1=1] (highway), [rising=1, falling=0]
                 # acq2106_161> set.site 0 spad1_us=1,0,1
 
-                # enable=1 disable=0, highway (d0=0, d1=1)?, WR_TAI_CUR_L register, update speed in Hz?
+                # spad[2]
+                # [enable=1 disable=0], [d0=0, d1=1] (highway), WR_TAI_CUR_L register, sampled at 1kHz: update speed in Hz?
                 # acq2106_161> set.site 0 spadcop2 1,0,0x208,1000
 
-                # enable=1 disable=0, highway (d0=0, d1=1)?, WR_CUR_VERNR register, update speed in Hz?
+                # spad[3]
+                # [enable=1 disable=0], [d0=0, d1=1] (highway), WR_CUR_VERNR register, sampled at 1kHz: update speed in Hz?
                 # acq2106_161> set.site 0 spadcop3 1,0,0x218,1000
 
                 print('%d %d 0x%08x 0x%08x' % (spad[0], spad[1], spad[2], spad[3],))
