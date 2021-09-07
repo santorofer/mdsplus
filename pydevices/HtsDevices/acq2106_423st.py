@@ -227,22 +227,28 @@ class _ACQ2106_423ST(MDSplus.Device):
                         ((self.device_thread.io_buffer_size / np.int16(0).nbytes) * dt)
 
                 buffer = np.frombuffer(buf, dtype='int16')
+                spad   = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
+
                 i = 0
                 for c in self.chans:
                     slength = self.seg_length/self.decim[i]
                     deltat = dt * self.decim[i]
-                    if c.on:
+                    
+                    if c.on and self.spad:
+                        stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
+                        b = buffer[i::stride]
+                        timeStamp = spad[2] + (spad[3] & 0x0FFFFFFF) * self.wrtd_tickns
+                        c.putrow(self.io_buffer_size, timeStamp, b)
+                    elif c.on:
                         stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
                         b = buffer[i::stride]
                         begin = segment * slength * deltat
                         end = begin + (slength - 1) * deltat
                         dim = MDSplus.Range(begin, end, deltat)
                         c.makeSegment(begin, end, dim, b)
+
                     i += 1
                 
-
-                spad = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
-
                 # In the ACQ:
                 # [enable=1 disable=0], SPAD count, dont care
                 # acq2106_161> set.site 0 spad=1,4,0
@@ -260,6 +266,7 @@ class _ACQ2106_423ST(MDSplus.Device):
                 # spad[3]
                 # [enable=1 disable=0], [d0=0, d1=1] (highway), WR_CUR_VERNR register, sampled at 1kHz: update speed in Hz?
                 # acq2106_161> set.site 0 spadcop3 1,0,0x218,1000
+                # TIME = SPAD[2] s  + SPAD[3] & 0x0FFFFFFF * WRTD_TICKNS ns
 
                 print('%d %d 0x%08x 0x%08x' % (spad[0], spad[1], spad[2], spad[3],))
 
@@ -367,9 +374,12 @@ class _ACQ2106_423ST(MDSplus.Device):
         'wrtt1'         # White Rabbit Trigger
     ]
 
-    def init(self):
+    def init(self, spad=False):
         uut = self.getUUT()
         uut.s0.set_knob('set_abort', '1')
+
+        # Ask UUT for its WRTD_TICKNS, acq2106_161> get.site 11 WRTD_TICKNS
+        self.wrtd_tickns = uut.s11.WRTD_TICKNS
 
         if self.ext_clock.length > 0:
             raise Exception('External Clock is not supported')
@@ -442,6 +452,9 @@ class _ACQ2106_423ST(MDSplus.Device):
                 ch.COEFFICIENT.putData(float(coeffs[ic]))
 
         self.running.on = True
+        # If spad == 1, then we use TAI as time base during streaming:
+        self.spad = spad
+
         thread = self.MDSWorker(self)
         thread.start()
     INIT = init
