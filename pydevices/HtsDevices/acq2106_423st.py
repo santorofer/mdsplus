@@ -188,6 +188,8 @@ class _ACQ2106_423ST(MDSplus.Device):
             self.device_thread = self.DeviceWorker(self)
 
         def run(self):
+            from scipy import interpolate
+            from datetime import datetime
             def lcm(a, b):
                 from fractions import gcd
                 return (a * b / gcd(int(a), int(b)))
@@ -216,6 +218,10 @@ class _ACQ2106_423ST(MDSplus.Device):
             segment = 0
             running = self.dev.running
             max_segments = self.dev.max_segments.data()
+            vernier_x = []
+            vernier_y = []
+            temp=[]
+            temp_index=[]
             while running.on and segment < max_segments:
                 try:
                     buf = self.full_buffers.get(block=True, timeout=1)
@@ -227,28 +233,69 @@ class _ACQ2106_423ST(MDSplus.Device):
                         ((self.device_thread.io_buffer_size / np.int16(0).nbytes) * dt)
 
                 buffer = np.frombuffer(buf, dtype='int16')
-                spad   = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
+                spad  = np.frombuffer(buf, dtype='uint32', count=-1, offset=self.nchans * np.int16(0).nbytes)
+
+                #spad_stride = ((self.nchans * np.int16(0).nbytes) + (4 * np.int32(0).nbytes)) / np.int32(0).nbytes
+                spad_stride = (self.nchans / 2) + 4
+
+                spad1 = spad[1::spad_stride] # usec since start
+                spad2 = spad[2::spad_stride] # sec
+                spad3 = spad[3::spad_stride]
+
+                #vernier   = list(spad3 & 0x0FFFFFFF)
+                vernier   = spad3 & 0x0FFFFFFF
+
+                # # [temp.append(vernier.index(x), x) for x in vernier if x not in temp]
+                # for x in vernier:
+                #     if x not in vernier_y:
+                #         vernier_y.append(x)
+                #         vernier_x.append(vernier.index(x))
+
+                # f = interpolate.interp1d(vernier_x, vernier_y, fill_value='extrapolate')
+                # vernier = f(list(range(len(vernier))))
+
+                vernierns = vernier * self.dev.wrtd_tickns
+                timeStamp = (spad2 * 1e9) + vernierns # wall TAI time in ns
+                #timeStamp = (spad1 * 1e-3) + vernierns * 1e-9  # in secs from start of shot
+
+                before = datetime.now()
+                timeStamp=list(timeStamp)                            
+                for x in timeStamp:
+                    if x not in temp:
+                        temp.append(x)
+                        temp_index.append(timeStamp.index(x))
+                f = interpolate.interp1d(temp_index, temp, fill_value='extrapolate')
+                timeStamp = f(list(range(len(timeStamp))))
+                after = datetime.now()
+                print(after - before)
+                temp=[]
+                temp_index=[]
+                # TCL> 
+                # spad2     [1631551286 1631551286 1631551286 ... 1631551296 1631551296 1631551296]
+                # spad3     [1647268439 1647268439 1647268439 ... 36653556   36653556   36653556]
+                # vernier   [36655703   36655703   36655703   ... 36653556   36653556   36653556]
+                # vernierns [1.78879831e+09 1.78879831e+09 1.78879831e+09 ... 1.78869353e+09 1.78869353e+09 1.78869353e+09]
+                # timeStamp [1.63155129e+18 1.63155129e+18 1.63155129e+18 ... 1.63155130e+18 1.63155130e+18 1.63155130e+18]
 
                 i = 0
                 for c in self.chans:
                     slength = self.seg_length/self.decim[i]
                     deltat = dt * self.decim[i]
                     
-                    if c.on and self.spad:
+                    if c.on:
                         stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
-                        b = buffer[i::stride]
-                        timeStamp = spad[2] + (spad[3] & 0x0FFFFFFF) * self.wrtd_tickns
-                        c.putrow(self.io_buffer_size, timeStamp, b)
-                    elif c.on:
-                        stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
-                        b = buffer[i::stride]
-                        begin = segment * slength * deltat
-                        end = begin + (slength - 1) * deltat
-                        dim = MDSplus.Range(begin, end, deltat)
-                        c.makeSegment(begin, end, dim, b)
+                        bdata = buffer[i::stride]
 
+                        if self.dev.spad:
+                            c.makeTimestampedSegment(timeStamp, bdata)
+                        else:
+                            begin = segment * slength * deltat
+                            end = begin + (slength - 1) * deltat
+                            dim = MDSplus.Range(begin, end, deltat)
+                            c.makeSegment(begin, end, dim, bdata)
                     i += 1
                 
+                #spad   = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
                 # In the ACQ:
                 # [enable=1 disable=0], SPAD count, dont care
                 # acq2106_161> set.site 0 spad=1,4,0
@@ -268,7 +315,7 @@ class _ACQ2106_423ST(MDSplus.Device):
                 # acq2106_161> set.site 0 spadcop3 1,0,0x218,1000
                 # TIME = SPAD[2] s  + SPAD[3] & 0x0FFFFFFF * WRTD_TICKNS ns
 
-                print('%d %d 0x%08x 0x%08x' % (spad[0], spad[1], spad[2], spad[3],))
+                #print('%d %d 0x%08x 0x%08x' % (spad[0], spad[1], spad[2], spad[3],))
 
                 segment += 1
                 MDSplus.Event.setevent(event_name)
@@ -373,10 +420,12 @@ class _ACQ2106_423ST(MDSplus.Device):
         'fp_sync',      # Front Panel SYNC
         'wrtt1'         # White Rabbit Trigger
     ]
-
-    def init(self, spad=False):
+    
+    def init(self, spad=True):
         uut = self.getUUT()
         uut.s0.set_knob('set_abort', '1')
+        #Query the TICKNS from the UUT:
+        self.wrtd_tickns = float(uut.cC.WRTD_TICKNS)
 
         # Ask UUT for its WRTD_TICKNS, acq2106_161> get.site 11 WRTD_TICKNS
         self.wrtd_tickns = uut.s11.WRTD_TICKNS
@@ -452,7 +501,8 @@ class _ACQ2106_423ST(MDSplus.Device):
                 ch.COEFFICIENT.putData(float(coeffs[ic]))
 
         self.running.on = True
-        # If spad == 1, then we use TAI as time base during streaming:
+
+        # If spad == True, then sample times are taken from the D-Tacq SPAD metadata:
         self.spad = spad
 
         thread = self.MDSWorker(self)
@@ -470,7 +520,8 @@ class _ACQ2106_423ST(MDSplus.Device):
 
     def getUUT(self):
         import acq400_hapi
-        uut = acq400_hapi.Acq400(self.node.data(), monitor=False)
+        #uut = acq400_hapi.Acq400(self.node.data(), monitor=False)
+        uut = acq400_hapi.Acq2106(self.node.data(), has_wr=True)
         return uut
 
     def setChanScale(self, num):
