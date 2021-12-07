@@ -218,11 +218,11 @@ class _ACQ2106_423ST(MDSplus.Device):
             segment = 0
             running = self.dev.running
             max_segments = self.dev.max_segments.data()
-            vernier_x = []
-            vernier_y = []
-            temp=[]
-            temp_index=[]
+
             while running.on and segment < max_segments:
+                temp=[]
+                temp_index=[]
+
                 try:
                     buf = self.full_buffers.get(block=True, timeout=1)
                 except Empty:
@@ -233,32 +233,24 @@ class _ACQ2106_423ST(MDSplus.Device):
                         ((self.device_thread.io_buffer_size / np.int16(0).nbytes) * dt)
 
                 buffer = np.frombuffer(buf, dtype='int16')
-                spad  = np.frombuffer(buf, dtype='uint32', count=-1, offset=self.nchans * np.int16(0).nbytes)
+                spad   = np.frombuffer(buf, dtype='uint32', count=-1, offset=self.nchans * np.int16(0).nbytes)
 
                 #spad_stride = ((self.nchans * np.int16(0).nbytes) + (4 * np.int32(0).nbytes)) / np.int32(0).nbytes
                 spad_stride = (self.nchans / 2) + 4
 
-                spad1 = spad[1::spad_stride] # usec since start
                 spad2 = spad[2::spad_stride] # sec
                 spad3 = spad[3::spad_stride]
 
-                #vernier   = list(spad3 & 0x0FFFFFFF)
-                vernier   = spad3 & 0x0FFFFFFF
-
-                # # [temp.append(vernier.index(x), x) for x in vernier if x not in temp]
-                # for x in vernier:
-                #     if x not in vernier_y:
-                #         vernier_y.append(x)
-                #         vernier_x.append(vernier.index(x))
-
-                # f = interpolate.interp1d(vernier_x, vernier_y, fill_value='extrapolate')
-                # vernier = f(list(range(len(vernier))))
+                vernier   = (spad3 & 0x0FFFFFFF)
 
                 vernierns = vernier * self.dev.wrtd_tickns
                 timeStamp = (spad2 * 1e9) + vernierns # wall TAI time in ns
-                #timeStamp = (spad1 * 1e-3) + vernierns * 1e-9  # in secs from start of shot
 
-                before = datetime.now()
+                # vernierns = vernier * self.dev.wrtd_tickns
+                # timeStamp = (spad2) + vernierns * 1e-9 # wall TAI time in secs
+                print("#### time stamp ", spad2[0], vernier[0], timeStamp[0])
+
+                # before = datetime.now()
                 timeStamp=list(timeStamp)                            
                 for x in timeStamp:
                     if x not in temp:
@@ -266,10 +258,11 @@ class _ACQ2106_423ST(MDSplus.Device):
                         temp_index.append(timeStamp.index(x))
                 f = interpolate.interp1d(temp_index, temp, fill_value='extrapolate')
                 timeStamp = f(list(range(len(timeStamp))))
-                after = datetime.now()
-                print(after - before)
-                temp=[]
-                temp_index=[]
+
+                #print("#### after interpol. time stamp ", timeStamp[0], timeStamp[1], timeStamp[10], timeStamp[11])
+                # after = datetime.now()
+                # print(after - before)
+
                 # TCL> 
                 # spad2     [1631551286 1631551286 1631551286 ... 1631551296 1631551296 1631551296]
                 # spad3     [1647268439 1647268439 1647268439 ... 36653556   36653556   36653556]
@@ -281,7 +274,7 @@ class _ACQ2106_423ST(MDSplus.Device):
                 for c in self.chans:
                     slength = self.seg_length/self.decim[i]
                     deltat = dt * self.decim[i]
-                    
+
                     if c.on:
                         stride = (self.nchans * self.decim[i]) + 8 # includes SPAD metadata (4 x 16 bit)
                         bdata = buffer[i::stride]
@@ -296,7 +289,14 @@ class _ACQ2106_423ST(MDSplus.Device):
                     i += 1
                 
                 #spad   = np.frombuffer(buf, dtype='uint32', count=4, offset=self.nchans * np.int16(0).nbytes)
-                # In the ACQ:
+                # In the ACQ, set to enable the SPAD:
+                # set.site 0 spad=1,4,0
+                # set.site 0 spad1_us=1,0,1
+                # set.site 0 spadcop2 1,0,0x208,1000
+                # set.site 0 spadcop3 1,0,0x218,1000
+                # set.site 11 WRTD_TICKNS=48.8
+                #
+                # where:
                 # [enable=1 disable=0], SPAD count, dont care
                 # acq2106_161> set.site 0 spad=1,4,0
 
@@ -427,9 +427,6 @@ class _ACQ2106_423ST(MDSplus.Device):
         #Query the TICKNS from the UUT:
         self.wrtd_tickns = float(uut.cC.WRTD_TICKNS)
 
-        # Ask UUT for its WRTD_TICKNS, acq2106_161> get.site 11 WRTD_TICKNS
-        self.wrtd_tickns = uut.s11.WRTD_TICKNS
-
         if self.ext_clock.length > 0:
             raise Exception('External Clock is not supported')
 
@@ -488,7 +485,7 @@ class _ACQ2106_423ST(MDSplus.Device):
         # Fetching all calibration information from every channel.
         uut.fetch_all_calibration()
         coeffs = uut.cal_eslo[1:]
-        eoff = uut.cal_eoff[1:]
+        eoff   = uut.cal_eoff[1:]
 
         self.chans = []
         nchans = uut.nchan()
