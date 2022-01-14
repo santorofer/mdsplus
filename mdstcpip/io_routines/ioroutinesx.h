@@ -274,16 +274,30 @@ static inline SOCKET get_single_server_socket(char *name)
   freopen(logfile, "a", stderr);
   FREE_NOW(logfile);
   FREE_NOW(logdir);
-  if (!DuplicateHandle(OpenProcess(PROCESS_ALL_ACCESS, TRUE, ppid),
-                       (HANDLE)psock, GetCurrentProcess(), (HANDLE *)&h,
-                       PROCESS_ALL_ACCESS, TRUE,
-                       DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS))
-  {
-    fprintf(stderr, "Attempting to duplicate socket from pid %d socket %d\n",
-            ppid, (int)psock);
-    perror("Error duplicating socket from parent");
-    exit(EXIT_FAILURE);
-  }
+
+  #if SOCKET == UDT_SOCKET
+    if (!DuplicateHandle(OpenProcess(PROCESS_ALL_ACCESS, TRUE, ppid),
+                          (HANDLE)psock, GetCurrentProcess(), (HANDLE *)&h,
+                          PROCESS_ALL_ACCESS, TRUE,
+                          DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS))
+    {
+      fprintf(stderr, "Attempting to duplicate socket from pid %d socket %d\n",
+              ppid, (int)psock);
+      perror("Error duplicating socket from parent");
+      exit(EXIT_FAILURE);
+    }
+  #else
+    WSAPROTOCOL_INFOA protocolInfo;
+    if (!WSADuplicateSocketA(psock, OpenProcess(PROCESS_ALL_ACCESS, TRUE, ppid), &protocolInfo))
+    {
+      fprintf(stderr, "Attempting to duplicate socket from pid %d socket %d\n",
+              ppid, (int)psock);
+      print_socket_error("Error duplicating socket from parent");
+      exit(EXIT_FAILURE);
+    }
+    SOCKET h = WSASocketA(AF_T, SOCK_STREAM, &protocolInfo, 0, 0);
+  #endif
+
   sprintf(shutdownEventName, "MDSIP_%s_SHUTDOWN", GetPortname());
   shutdownEvent = CreateEvent(NULL, FALSE, FALSE, (LPCTSTR)shutdownEventName);
   if (!RegisterWaitForSingleObject(&waitHandle, shutdownEvent, ShutdownEvent,
